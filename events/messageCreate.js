@@ -1,20 +1,11 @@
 const { cooldown, permissions } = require("../util/functions");
 const { PREFIX: prefix } = require(`../util/config.json`);
+const databaseService = require("../services/databaseService");
 
 module.exports = {
   name: "messageCreate",
   once: false,
   async execute(message, client) {
-    const CHANNEL_IDS = ["1201249045771984936", "1112734635210846310"];
-    const BOT_ID = "1092037151119654913";
-
-    if (
-      CHANNEL_IDS.includes(message.channel.id) &&
-      message.author.id === BOT_ID
-    ) {
-      require("../util/bot_monitors/newSale")(client, message);
-    }
-
     let commandPrefix = prefix;
     const mentionRegex = message.content.match(
       new RegExp(`^<@!?(${client.user.id})>`, "gi")
@@ -30,7 +21,31 @@ module.exports = {
         (command) => command.aliases && command.aliases.includes(commandName)
       );
 
-    if (!command) return;
+    if (!command) {
+      if (message.author.bot) return;
+      const database = await databaseService.getDatabase("DiscordServer");
+      const collection = await databaseService.getCollection(
+        "SpikeyMessages",
+        database
+      );
+
+      const date = new Date();
+      const dateString = `${date.getFullYear()}-${String(
+        date.getMonth() + 1
+      ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+      const newMessage = {
+        userId: message.author.id,
+        content: message.content,
+        timestamp: date.getTime(),
+      };
+
+      await collection.updateOne(
+        { _id: message.author.id },
+        { $push: { [dateString]: newMessage } },
+        { upsert: true }
+      );
+    }
 
     if (command.permissions && command.permissions.length) {
       if (permissions(message, command)) {
